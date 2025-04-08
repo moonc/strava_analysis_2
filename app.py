@@ -63,7 +63,6 @@ if selected_activities:
         stream = fetch.get_activity_stream(activity_id, access_token, keys=keys)
 
         with tabs[idx]:
-            with tabs[idx]:
             analyze_data.map_activity(activity_id, access_token, key=f"map_{activity_id}")
 
         coords = stream.get('latlng', {}).get('data', [])
