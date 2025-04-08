@@ -5,7 +5,7 @@ import login
 import fetch
 import analyze_data
 import branca.colormap as cm
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.svm import SVR
@@ -50,6 +50,7 @@ st.sidebar.header("Hyperparameters")
 n_estimators = st.sidebar.slider("Number of Trees (for Forest/Boosting)", 10, 300, 100, step=10)
 
 # --- Main Display ---
+import matplotlib.pyplot as plt
 if selected_activities:
     tabs = st.tabs([f"Map: {name}" for name in selected_activities] + ["Charts", "ML"])
 
@@ -62,6 +63,7 @@ if selected_activities:
         stream = fetch.get_activity_stream(activity_id, access_token, keys=keys)
 
         with tabs[idx]:
+            with tabs[idx]:
             analyze_data.map_activity(activity_id, access_token, key=f"map_{activity_id}")
 
         coords = stream.get('latlng', {}).get('data', [])
@@ -77,9 +79,26 @@ if selected_activities:
 
         chart_data.append((activity_name, heartrates, elevations, times, distances))
 
-        analyze_data.map_activity(activity_id, access_token)
+        
 
         # --- ML Tab ---
+    with tabs[-2]:
+        st.subheader("Charts")
+        for name, hr, elev, time, dist in chart_data:
+            st.markdown(f"#### {name}")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=time, y=hr, mode='lines', name='Heart Rate', line=dict(color='red')))
+            fig.add_trace(go.Scatter(x=dist, y=elev, mode='lines', name='Elevation', yaxis='y2', line=dict(color='green')))
+
+            fig.update_layout(
+                xaxis=dict(title='Time (s)'),
+                yaxis=dict(title='Heart Rate (bpm)', color='red'),
+                yaxis2=dict(title='Elevation (m)', overlaying='y', side='right', color='green'),
+                legend=dict(x=0.01, y=0.99)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+
     with tabs[-1]:
         st.subheader("Compare Models: Predict HR and Pace (Aggregate Data)")
 
