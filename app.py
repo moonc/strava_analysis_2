@@ -123,7 +123,7 @@ if login.login():  # Check if the user is authenticated
         # --- ML Tab ---
         with tabs[-1]:
             st.subheader("Compare Models: Predict HR and Pace (Aggregate Data)")
-            
+
             models = {
                 "Linear Regression": LinearRegression(),
                 "Random Forest": RandomForestRegressor(n_estimators=n_estimators, random_state=42),
