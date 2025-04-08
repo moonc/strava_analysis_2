@@ -2,14 +2,26 @@ import requests
 import pandas as pd
 import streamlit as st
 
-def fetch_activities(access_token, per_page=10, page=1):
+def fetch_activities(access_token, per_page=100, max_pages=2):
+    all_activities = []
     headers = {'Authorization': f'Bearer {access_token}'}
-    url = 'https://www.strava.com/api/v3/athlete/activities'
-    params = {'per_page': per_page, 'page': page}
-    res = requests.get(url, headers=headers, params=params)
-    if res.status_code != 200:
-        raise Exception("Failed to fetch activities:", res.text)
-    return res.json()
+
+    for page in range(1, max_pages + 1):
+        url = 'https://www.strava.com/api/v3/athlete/activities'
+        params = {'per_page': per_page, 'page': page}
+        res = requests.get(url, headers=headers, params=params)
+
+        if res.status_code != 200:
+            raise Exception("Failed to fetch activities:", res.text)
+
+        activities = res.json()
+        if not activities:
+            break
+
+        all_activities.extend(activities)
+
+    return all_activities
+
 
 def get_activity_detail(activity_id, access_token):
     url = f"https://www.strava.com/api/v3/activities/{activity_id}"
@@ -29,8 +41,9 @@ def get_activity_stream(activity_id, access_token, keys=['latlng']):
     return res.json()
 
 def acquire_data(access_token):
-    activities = fetch_activities(access_token)
+    activities = fetch_activities(access_token, per_page=100, max_pages=2)  # ~200 activities
     if not activities:
         print("No activities found.")
         return
     return pd.DataFrame(activities)
+
