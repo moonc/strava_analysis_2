@@ -1,6 +1,7 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
+import login
 import fetch
 import analyze_data
 import branca.colormap as cm
@@ -9,15 +10,20 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-# import xgboost as xgb
 import numpy as np
 import pandas as pd
 
+# Authenticate user
+if not login.login():
+    st.stop()
+
+access_token = login.get_access_token()
+
 st.set_page_config(page_title="Strava Mini Dashboard", layout="wide")
-st.title("Strava Mini Dashboard")
+st.title("App (Main Dashboard)")
 
 # --- Load and filter data ---
-df = analyze_data.import_data(run=True)  # Only running activities
+df = analyze_data.import_data(access_token, run=True)
 activity_ids = analyze_data.get_ids(df) if df is not None else []
 activity_names = df['name'].tolist() if df is not None else []
 activity_map = dict(zip(activity_names, activity_ids))
@@ -52,7 +58,6 @@ if selected_activities:
 
     for idx, activity_name in enumerate(selected_activities):
         activity_id = activity_map.get(activity_name)
-        access_token = fetch.get_access_token()
         keys = ['latlng', 'heartrate', 'altitude', 'time', 'distance']
         stream = fetch.get_activity_stream(activity_id, access_token, keys=keys)
 
@@ -69,7 +74,7 @@ if selected_activities:
 
         chart_data.append((activity_name, heartrates, elevations, times, distances))
 
-    # --- ML Tab ---
+        # --- ML Tab ---
     with tabs[-1]:
         st.subheader("Compare Models: Predict HR and Pace (Aggregate Data)")
 
@@ -80,8 +85,7 @@ if selected_activities:
             "Gradient Boosting": GradientBoostingRegressor(n_estimators=n_estimators, random_state=42),
         }
 
-        selected_models = {k: v for k, v in models.items() if k in selected_models}
-
+        selected_models_dict = {k: v for k, v in models.items() if k in selected_models}
         export_data = []
         metrics_summary = []
         pace_models = {}
@@ -92,37 +96,27 @@ if selected_activities:
             if all_hr and all_elev and len(all_hr) == len(all_elev):
                 X_hr = np.array(all_elev).reshape(-1, 1)
                 y_hr = np.array(all_hr)
-
-                for name, model in selected_models.items():
+                for name, model in selected_models_dict.items():
                     model.fit(X_hr, y_hr)
                     pred = model.predict(X_hr)
-                    residuals = y_hr - pred
-
                     r2 = model.score(X_hr, y_hr)
                     mae = mean_absolute_error(y_hr, pred)
                     rmse = np.sqrt(mean_squared_error(y_hr, pred))
                     metrics_summary.append((name, "HR", r2, mae, rmse))
-
                     export_data.append(pd.DataFrame({"Model": name, "Actual HR": y_hr, "Predicted HR": pred}))
 
         with col2:
             if all_times and all_distances and all_hr and all_elev:
                 X_pace = np.column_stack((all_times, all_hr, all_elev))
                 y_pace = np.array(all_distances)
-
-                for name, model in selected_models.items():
+                for name, model in selected_models_dict.items():
                     model.fit(X_pace, y_pace)
                     pace_models[name] = model
                     pred = model.predict(X_pace)
-                    pred_pace = np.diff(pred, prepend=0)
-                    pred_pace = np.where(pred_pace <= 0, np.nan, 60 / (pred_pace / 1609.34))
-                    residuals = y_pace - pred
-
                     r2 = model.score(X_pace, y_pace)
                     mae = mean_absolute_error(y_pace, pred)
                     rmse = np.sqrt(mean_squared_error(y_pace, pred))
                     metrics_summary.append((name, "Pace", r2, mae, rmse))
-
                     export_data.append(pd.DataFrame({"Model": name, "Actual Distance": y_pace, "Predicted Distance": pred}))
 
         if metrics_summary:
@@ -130,7 +124,6 @@ if selected_activities:
             summary_df = pd.DataFrame(metrics_summary, columns=["Model", "Target", "R²", "MAE", "RMSE"])
             st.dataframe(summary_df)
             st.bar_chart(summary_df.pivot(index="Model", columns="Target", values="R²"))
-
             best_models = summary_df.sort_values("R²", ascending=False).groupby("Target").first().reset_index()
             for _, row in best_models.iterrows():
                 st.info(f"Best model for {row['Target']}: {row['Model']} (R²: {row['R²']:.2f}, MAE: {row['MAE']:.2f}, RMSE: {row['RMSE']:.2f})")
@@ -151,38 +144,29 @@ if selected_activities:
         if input_distance > 0:
             model = pace_models[selected_model_name]
             max_time = max(all_times)
-
             if prediction_type == "Total Summary":
                 elevation_gain = (custom_elev / max(all_distances)) * (input_distance * 1609.34 if input_unit == "Miles" else input_distance * 1000)
                 input_features = np.array([[max_time, custom_hr, elevation_gain]])
-                predicted_total_time = model.predict(input_features)[0]  # in seconds
+                predicted_total_time = model.predict(input_features)[0]
                 lower_bound = predicted_total_time * 0.95
                 upper_bound = predicted_total_time * 1.05
-
-                if input_unit == "Miles":
-                    pace = (predicted_total_time / 60) / input_distance
-                    st.success(f"Predicted Time: {predicted_total_time/60:.2f} minutes")
-                    st.info(f"Estimated Range: {lower_bound/60:.2f} - {upper_bound/60:.2f} minutes")
-                    st.success(f"Predicted Average Pace: {pace:.2f} min/mile")
-                else:
-                    pace = (predicted_total_time / 60) / input_distance
-                    st.success(f"Predicted Time: {predicted_total_time/60:.2f} minutes")
-                    st.info(f"Estimated Range: {lower_bound/60:.2f} - {upper_bound/60:.2f} minutes")
-                    st.success(f"Predicted Average Pace: {pace:.2f} min/km")
-
+                pace = (predicted_total_time / 60) / input_distance
+                unit_label = "min/mile" if input_unit == "Miles" else "min/km"
+                st.success(f"Predicted Time: {predicted_total_time/60:.2f} minutes")
+                st.info(f"Estimated Range: {lower_bound/60:.2f} - {upper_bound/60:.2f} minutes")
+                st.success(f"Predicted Average Pace: {pace:.2f} {unit_label}")
             elif prediction_type == "Segment Splits":
-                unit_distance = 1.0  # 1 mile or 1 km
+                unit_distance = 1.0
                 num_segments = int(input_distance / unit_distance)
                 split_times = []
                 for _ in range(num_segments):
-                    elev = custom_elev  # Optional: vary per segment
-                    elev_gain = (elev / max(all_distances)) * (unit_distance * 1609.34 if input_unit == "Miles" else unit_distance * 1000)
+                    elev_gain = (custom_elev / max(all_distances)) * (unit_distance * 1609.34 if input_unit == "Miles" else unit_distance * 1000)
                     input_feat = np.array([[max_time, custom_hr, elev_gain]])
                     segment_time = model.predict(input_feat)[0] / num_segments
-                    split_times.append(segment_time / 60)  # convert to minutes
-
+                    split_times.append(segment_time / 60)
                 st.markdown("**Segment Split Times:**")
                 for i, t in enumerate(split_times):
                     st.write(f"Segment {i+1}: {t:.2f} min")
+
 else:
     st.info("Please select one or two activities for comparison.")
