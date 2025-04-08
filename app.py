@@ -50,7 +50,8 @@ st.sidebar.header("Hyperparameters")
 n_estimators = st.sidebar.slider("Number of Trees (for Forest/Boosting)", 10, 300, 100, step=10)
 
 # --- Main Display ---
-import matplotlib.pyplot as plt
+mobile_mode = st.checkbox("📱 Mobile Layout", value=False)
+
 if selected_activities:
     tabs = st.tabs([f"Map: {name}" for name in selected_activities] + ["Charts", "ML"])
 
@@ -78,9 +79,7 @@ if selected_activities:
 
         chart_data.append((activity_name, heartrates, elevations, times, distances))
 
-        
-
-        # --- ML Tab ---
+    # --- Charts Tab ---
     with tabs[-2]:
         st.subheader("Charts")
         for name, hr, elev, time, dist in chart_data:
@@ -97,7 +96,7 @@ if selected_activities:
             )
             st.plotly_chart(fig, use_container_width=True)
 
-
+    # --- ML Tab ---
     with tabs[-1]:
         st.subheader("Compare Models: Predict HR and Pace (Aggregate Data)")
 
