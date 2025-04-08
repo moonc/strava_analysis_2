@@ -3,7 +3,7 @@ import requests
 
 CLIENT_ID = st.secrets["STRAVA_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["STRAVA_SECRET"]
-REDIRECT_URI = "https://your-app-name.streamlit.app/"
+REDIRECT_URI = "https://stravaanalysis2-lhuvhrc7wna8bbdv8e4kr9.streamlit.app/"
 #REDIRECT_URI = "http://localhost:8501/"
 
 STRAVA_AUTH_URL = (
