@@ -74,6 +74,8 @@ if selected_activities:
 
         chart_data.append((activity_name, heartrates, elevations, times, distances))
 
+        analyze_data.map_activity(activity_id, access_token)
+
         # --- ML Tab ---
     with tabs[-1]:
         st.subheader("Compare Models: Predict HR and Pace (Aggregate Data)")
