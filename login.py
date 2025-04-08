@@ -4,7 +4,6 @@ import requests
 CLIENT_ID = st.secrets["STRAVA_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["STRAVA_SECRET"]
 REDIRECT_URI = "https://strava-analysis.streamlit.app/"
-#REDIRECT_URI = "http://localhost:8501/"
 
 STRAVA_AUTH_URL = (
     f"https://www.strava.com/oauth/authorize?client_id={CLIENT_ID}"
@@ -16,7 +15,6 @@ def login():
     code = st.query_params.get("code")
     if isinstance(code, list):
         code = code[0]
-
 
     if not code and "access_token" not in st.session_state:
         st.markdown(f"[**Log in with Strava**]({STRAVA_AUTH_URL})", unsafe_allow_html=True)
@@ -30,10 +28,10 @@ def login():
                 'code': code,
                 'grant_type': 'authorization_code'
             })
-
-            # Debug log
+            
+            # Debug log for response
             st.write("Strava response:", response.status_code, response.text)
-
+            
             if response.status_code == 200:
                 tokens = response.json()
                 st.session_state["access_token"] = tokens["access_token"]
