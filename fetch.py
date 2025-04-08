@@ -2,6 +2,8 @@ import requests
 import pandas as pd
 import streamlit as st
 
+# Caching the fetching of activity data
+@st.cache(ttl=3600, show_spinner=True)  # Cache for 1 hour (3600 seconds)
 def fetch_activities(access_token, per_page=100, max_pages=2):
     all_activities = []
     headers = {'Authorization': f'Bearer {access_token}'}
@@ -31,6 +33,7 @@ def get_activity_detail(activity_id, access_token):
         raise Exception("Failed to get activity details:", res.text)
     return res.json()
 
+@st.cache(ttl=3600, show_spinner=True)  # Cache for 1 hour (3600 seconds)
 def get_activity_stream(activity_id, access_token, keys=['latlng']):
     url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
     headers = {'Authorization': f'Bearer {access_token}'}
