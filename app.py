@@ -5,9 +5,11 @@ import fetch
 import analyze_data
 import branca.colormap as cm
 import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 st.set_page_config(page_title="Strava Mini Dashboard", layout="wide")
-st.title("🏃 Strava Mini Dashboard")
+st.title("Strava Mini Dashboard")
 
 # --- Load and filter data ---
 df = analyze_data.import_data(run=True)  # Only running activities
@@ -26,7 +28,7 @@ color_by = st.sidebar.selectbox(
 
 # --- Main Display ---
 if selected_activities:
-    tabs = st.tabs([f"Map: {name}" for name in selected_activities] + ["Charts"])
+    tabs = st.tabs([f"Map: {name}" for name in selected_activities] + ["Charts", "ML"])
 
     chart_data = []
 
@@ -109,8 +111,8 @@ if selected_activities:
         chart_data.append((activity_name, heartrates, elevations))
 
     # --- Chart Tab ---
-    with tabs[-1]:
-        st.subheader("📈 Heart Rate and Elevation Charts")
+    with tabs[-2]:
+        st.subheader("Heart Rate and Elevation Charts")
         for name, hr, elev in chart_data:
             st.markdown(f"### {name}")
             col1, col2 = st.columns(2)
@@ -136,5 +138,28 @@ if selected_activities:
                     st.pyplot(fig)
                 else:
                     st.write("No elevation data available.")
+
+    # --- ML Tab ---
+    with tabs[-1]:
+        st.subheader("ML Experiment: Predict HR from Elevation")
+        for name, hr, elev in chart_data:
+            st.markdown(f"### {name}")
+            if hr and elev and len(hr) == len(elev):
+                X = np.array(elev).reshape(-1, 1)
+                y = np.array(hr)
+                model = LinearRegression().fit(X, y)
+                pred_hr = model.predict(X)
+
+                fig, ax = plt.subplots()
+                ax.plot(hr, label="Actual HR", color='red')
+                ax.plot(pred_hr, label="Predicted HR", linestyle='--', color='green')
+                ax.set_title("Heart Rate Prediction from Elevation")
+                ax.set_xlabel("Data Point")
+                ax.set_ylabel("bpm")
+                ax.legend()
+                st.pyplot(fig)
+                st.success(f"R² Score: {model.score(X, y):.2f}")
+            else:
+                st.warning("Insufficient or mismatched data for ML model.")
 else:
     st.info("Please select one or two activities for comparison.")
