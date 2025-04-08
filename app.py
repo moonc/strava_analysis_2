@@ -61,6 +61,9 @@ if selected_activities:
         keys = ['latlng', 'heartrate', 'altitude', 'time', 'distance']
         stream = fetch.get_activity_stream(activity_id, access_token, keys=keys)
 
+        with tabs[idx]:
+            analyze_data.map_activity(activity_id, access_token)
+
         coords = stream.get('latlng', {}).get('data', [])
         heartrates = stream.get('heartrate', {}).get('data', [])
         elevations = stream.get('altitude', {}).get('data', [])
