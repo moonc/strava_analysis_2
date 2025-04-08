@@ -3,6 +3,8 @@ import folium
 from streamlit_folium import st_folium
 import fetch
 import branca.colormap as cm
+import numpy as np
+import pandas as pd
 
 def import_data(access_token, run=False):
     df = fetch.acquire_data(access_token)
