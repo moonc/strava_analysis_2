@@ -12,21 +12,65 @@ from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
-# Authenticate user
+# Set page layout and title
+st.set_page_config(page_title="Strava Mini Dashboard", layout="centered")
+st.title("Strava Mini Dashboard 🏃‍♂️🚴‍♀️")
+st.markdown(
+    """
+    Welcome to the **Strava Mini Dashboard**! 
+    This app helps you analyze your Strava activities and visualize important statistics like **Heart Rate**, **Pace**, and **Elevation**.
+    Please log in to get started.
+    """
+)
+
+# Display a friendly welcome image (optional)
+st.image("https://upload.wikimedia.org/wikipedia/commons/2/2e/Strava_logo.svg", width=300)
+
+# Create a nice-looking login prompt
 if not login.login():
-    st.stop()
+    # Show the login button as a large styled button
+    st.markdown(
+        """
+        <style>
+            .stButton>button {
+                background-color: #f7a80d;  /* Custom background color */
+                color: white;
+                font-size: 18px;
+                border-radius: 12px;
+                padding: 20px 40px;
+                width: 100%;
+                font-weight: bold;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                transition: all 0.3s ease;
+            }
+            .stButton>button:hover {
+                background-color: #ff5722;
+                box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2);
+            }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    st.button("Log in with Strava")
+    st.markdown(
+        """
+        To authenticate, you'll be redirected to Strava's login page. Once authenticated, you'll return to this page.
+        """
+    )
+    st.stop()  # Stop execution until the user logs in
 
+# After successful login
 access_token = login.get_access_token()
 
 if not fetch.check_access_token_validity(access_token):
     st.stop()  # Stop execution if the access token is invalid
 
+# Welcome the user and continue with the app
+st.success("✅ Logged in successfully! Welcome to your dashboard!")
 
-st.set_page_config(page_title="Strava Mini Dashboard", layout="wide")
-st.title("App (Main Dashboard)")
-
-# --- Load and filter data ---
+# Proceed with loading and displaying activity data
 df = analyze_data.import_data(access_token, run=True)
 activity_ids = analyze_data.get_ids(df) if df is not None else []
 activity_names = df['name'].tolist() if df is not None else []
@@ -46,7 +90,7 @@ model_options = [
     "Random Forest", 
     "Support Vector Regressor",
     "Gradient Boosting", 
-    ]
+]
 selected_models = st.sidebar.multiselect("Select ML Models", model_options, default=model_options)
 
 # --- Hyperparameters ---
@@ -103,14 +147,14 @@ if selected_activities:
     # --- ML Tab ---
     with tabs[-1]:
         st.subheader("Compare Models: Predict HR and Pace (Aggregate Data)")
-
+        
         models = {
             "Linear Regression": LinearRegression(),
             "Random Forest": RandomForestRegressor(n_estimators=n_estimators, random_state=42),
             "Support Vector Regressor": SVR(),
             "Gradient Boosting": GradientBoostingRegressor(n_estimators=n_estimators, random_state=42),
         }
-
+        
         selected_models_dict = {k: v for k, v in models.items() if k in selected_models}
         export_data = []
         metrics_summary = []
