@@ -23,7 +23,7 @@ def get_activity_detail(activity_id, access_token, save_to_csv=False, print_info
         df.to_csv('activity_details.csv', index=False)
         print("Activity details saved to activity_details.csv")
 
-def map_activity(activity_id, access_token):
+def map_activity(activity_id, access_token, key=None):
     stream = fetch.get_activity_stream(activity_id, access_token)
     if 'latlng' not in stream or not stream['latlng']['data']:
         print("No GPS data available for this activity.")
@@ -34,4 +34,4 @@ def map_activity(activity_id, access_token):
     folium.PolyLine(gps_coords, color='blue', weight=4).add_to(m)
     folium.Marker(gps_coords[0], tooltip="Start").add_to(m)
     folium.Marker(gps_coords[-1], tooltip="End").add_to(m)
-    st_folium(m, width=700, height=500)
+    st_folium(m, width=700, height=500, key=key)
