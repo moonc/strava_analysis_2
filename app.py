@@ -6,7 +6,12 @@ import analyze_data
 import branca.colormap as cm
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.svm import SVR
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+# import xgboost as xgb
 import numpy as np
+import pandas as pd
 
 st.set_page_config(page_title="Strava Mini Dashboard", layout="wide")
 st.title("Strava Mini Dashboard")
@@ -26,140 +31,119 @@ color_by = st.sidebar.selectbox(
     ("None", "Heart Rate (Gradient)", "Heart Rate (Zones)", "Elevation")
 )
 
+model_options = [
+    "Linear Regression", 
+    "Random Forest", 
+    "Support Vector Regressor",
+    "Gradient Boosting", 
+    ]
+selected_models = st.sidebar.multiselect("Select ML Models", model_options, default=model_options)
+
+# --- Hyperparameters ---
+st.sidebar.header("Hyperparameters")
+n_estimators = st.sidebar.slider("Number of Trees (for Forest/Boosting)", 10, 300, 100, step=10)
+
 # --- Main Display ---
 if selected_activities:
     tabs = st.tabs([f"Map: {name}" for name in selected_activities] + ["Charts", "ML"])
 
     chart_data = []
+    all_hr, all_elev, all_times, all_distances = [], [], [], []
 
     for idx, activity_name in enumerate(selected_activities):
         activity_id = activity_map.get(activity_name)
         access_token = fetch.get_access_token()
-        keys = ['latlng', 'heartrate', 'altitude']
+        keys = ['latlng', 'heartrate', 'altitude', 'time', 'distance']
         stream = fetch.get_activity_stream(activity_id, access_token, keys=keys)
 
         coords = stream.get('latlng', {}).get('data', [])
         heartrates = stream.get('heartrate', {}).get('data', [])
         elevations = stream.get('altitude', {}).get('data', [])
+        times = stream.get('time', {}).get('data', [])
+        distances = stream.get('distance', {}).get('data', [])
 
-        detail = fetch.get_activity_detail(activity_id, access_token)
-        moving_time = detail.get('moving_time', 0)
-        distance = detail.get('distance', 0)
+        all_hr.extend(heartrates)
+        all_elev.extend(elevations)
+        all_times.extend(times)
+        all_distances.extend(distances)
 
-        with tabs[idx]:
-            if not coords:
-                st.error(f"No GPS data for {activity_name}.")
-                continue
-
-            m = folium.Map(location=coords[0], zoom_start=13)
-
-            if color_by == "Heart Rate (Gradient)" and heartrates:
-                min_hr, max_hr = min(heartrates), max(heartrates)
-                colormap = cm.linear.RdYlGn_11.scale(min_hr, max_hr).to_step(10)
-                colormap.caption = 'Heart Rate (bpm)'
-
-            for i in range(1, len(coords)):
-                color = 'blue'
-                tooltip = None
-
-                if color_by == "Heart Rate (Gradient)" and heartrates:
-                    color = colormap(heartrates[i])
-                    tooltip = f"HR: {heartrates[i]} bpm"
-                elif color_by == "Heart Rate (Zones)" and heartrates:
-                    hr = heartrates[i]
-                    if hr < 120:
-                        color = 'green'
-                    elif hr < 150:
-                        color = 'orange'
-                    else:
-                        color = 'red'
-                    tooltip = f"HR: {hr} bpm"
-                elif color_by == "Elevation" and elevations:
-                    elev_change = elevations[i] - elevations[i - 1]
-                    color = 'orange' if elev_change > 0 else 'purple'
-                    tooltip = f"Elevation: {elevations[i]:.1f} m"
-
-                folium.PolyLine([coords[i - 1], coords[i]], color=color, weight=4, tooltip=tooltip).add_to(m)
-
-            if color_by == "Heart Rate (Gradient)" and heartrates:
-                colormap.add_to(m)
-
-            st.subheader(activity_name)
-            st_data = st_folium(m, width=700, height=500)
-
-            st.markdown("**Stats:**")
-            if heartrates:
-                st.metric("Avg HR", f"{sum(heartrates)//len(heartrates)} bpm")
-                st.metric("Max HR", f"{max(heartrates)} bpm")
-                st.metric("Min HR", f"{min(heartrates)} bpm")
-            else:
-                st.write("No heart rate data available.")
-
-            if elevations:
-                st.metric("Max Elevation", f"{max(elevations):.1f} m")
-                st.metric("Min Elevation", f"{min(elevations):.1f} m")
-                st.metric("Elevation Gain", f"{elevations[-1] - elevations[0]:.1f} m")
-            else:
-                st.write("No elevation data available.")
-
-            if moving_time > 0 and distance > 0:
-                pace = (moving_time / 60) / (distance / 1000)  # min/km
-                st.metric("Avg Pace", f"{pace:.2f} min/km")
-            else:
-                st.write("Pace data unavailable.")
-
-        chart_data.append((activity_name, heartrates, elevations))
-
-    # --- Chart Tab ---
-    with tabs[-2]:
-        st.subheader("Heart Rate and Elevation Charts")
-        for name, hr, elev in chart_data:
-            st.markdown(f"### {name}")
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if hr:
-                    fig, ax = plt.subplots()
-                    ax.plot(hr, color='red')
-                    ax.set_title("Heart Rate")
-                    ax.set_xlabel("Data Point")
-                    ax.set_ylabel("bpm")
-                    st.pyplot(fig)
-                else:
-                    st.write("No heart rate data available.")
-
-            with col2:
-                if elev:
-                    fig, ax = plt.subplots()
-                    ax.plot(elev, color='purple')
-                    ax.set_title("Elevation")
-                    ax.set_xlabel("Data Point")
-                    ax.set_ylabel("Meters")
-                    st.pyplot(fig)
-                else:
-                    st.write("No elevation data available.")
+        chart_data.append((activity_name, heartrates, elevations, times, distances))
 
     # --- ML Tab ---
     with tabs[-1]:
-        st.subheader("ML Experiment: Predict HR from Elevation")
-        for name, hr, elev in chart_data:
-            st.markdown(f"### {name}")
-            if hr and elev and len(hr) == len(elev):
-                X = np.array(elev).reshape(-1, 1)
-                y = np.array(hr)
-                model = LinearRegression().fit(X, y)
-                pred_hr = model.predict(X)
+        st.subheader("Compare Models: Predict HR and Pace (Aggregate Data)")
 
-                fig, ax = plt.subplots()
-                ax.plot(hr, label="Actual HR", color='red')
-                ax.plot(pred_hr, label="Predicted HR", linestyle='--', color='green')
-                ax.set_title("Heart Rate Prediction from Elevation")
-                ax.set_xlabel("Data Point")
-                ax.set_ylabel("bpm")
-                ax.legend()
-                st.pyplot(fig)
-                st.success(f"R² Score: {model.score(X, y):.2f}")
-            else:
-                st.warning("Insufficient or mismatched data for ML model.")
+        models = {
+            "Linear Regression": LinearRegression(),
+            "Random Forest": RandomForestRegressor(n_estimators=n_estimators, random_state=42),
+            "Support Vector Regressor": SVR(),
+            "Gradient Boosting": GradientBoostingRegressor(n_estimators=n_estimators, random_state=42),
+                    }
+
+        selected_models = {k: v for k, v in models.items() if k in selected_models}
+
+        export_data = []
+        metrics_summary = []
+        pace_models = {}
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if all_hr and all_elev and len(all_hr) == len(all_elev):
+                X_hr = np.array(all_elev).reshape(-1, 1)
+                y_hr = np.array(all_hr)
+
+                for name, model in selected_models.items():
+                    model.fit(X_hr, y_hr)
+                    pred = model.predict(X_hr)
+                    residuals = y_hr - pred
+
+                    r2 = model.score(X_hr, y_hr)
+                    mae = mean_absolute_error(y_hr, pred)
+                    rmse = np.sqrt(mean_squared_error(y_hr, pred))
+                    metrics_summary.append((name, "HR", r2, mae, rmse))
+
+                    export_data.append(pd.DataFrame({"Model": name, "Actual HR": y_hr, "Predicted HR": pred}))
+
+        with col2:
+            if all_times and all_distances and all_hr and all_elev:
+                X_pace = np.column_stack((all_times, all_hr, all_elev))
+                y_pace = np.array(all_distances)
+
+                for name, model in selected_models.items():
+                    model.fit(X_pace, y_pace)
+                    pace_models[name] = model
+                    pred = model.predict(X_pace)
+                    pred_pace = np.diff(pred, prepend=0)
+                    pred_pace = np.where(pred_pace <= 0, np.nan, 60 / (pred_pace / 1609.34))
+                    residuals = y_pace - pred
+
+                    r2 = model.score(X_pace, y_pace)
+                    mae = mean_absolute_error(y_pace, pred)
+                    rmse = np.sqrt(mean_squared_error(y_pace, pred))
+                    metrics_summary.append((name, "Pace", r2, mae, rmse))
+
+                    export_data.append(pd.DataFrame({"Model": name, "Actual Distance": y_pace, "Predicted Distance": pred}))
+
+        if metrics_summary:
+            st.markdown("### Model Comparison Summary")
+            summary_df = pd.DataFrame(metrics_summary, columns=["Model", "Target", "R²", "MAE", "RMSE"])
+            st.dataframe(summary_df)
+            st.bar_chart(summary_df.pivot(index="Model", columns="Target", values="R²"))
+
+        if export_data:
+            export_df = pd.concat(export_data, ignore_index=True)
+            csv = export_df.to_csv(index=False).encode('utf-8')
+            st.download_button("Download Predictions as CSV", csv, "model_predictions.csv", "text/csv")
+
+        st.markdown("### Predict Average Pace for a Given Distance")
+        selected_model_name = st.selectbox("Choose Model for Prediction", list(pace_models.keys()))
+        input_distance = st.number_input("Enter Distance (in meters)", min_value=100.0, step=100.0)
+        if input_distance > 0:
+            model = pace_models[selected_model_name]
+            input_features = np.array([[max(all_times), np.mean(all_hr), np.mean(all_elev)]])
+            predicted_time = model.predict(input_features)[0]
+            avg_pace = (predicted_time / 60) / (input_distance / 1609.34)  # min/mile
+            st.success(f"Predicted Average Pace: {avg_pace:.2f} min/mile")
 else:
     st.info("Please select one or two activities for comparison.")
