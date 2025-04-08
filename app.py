@@ -78,7 +78,7 @@ if selected_activities:
             "Random Forest": RandomForestRegressor(n_estimators=n_estimators, random_state=42),
             "Support Vector Regressor": SVR(),
             "Gradient Boosting": GradientBoostingRegressor(n_estimators=n_estimators, random_state=42),
-                    }
+        }
 
         selected_models = {k: v for k, v in models.items() if k in selected_models}
 
@@ -131,19 +131,58 @@ if selected_activities:
             st.dataframe(summary_df)
             st.bar_chart(summary_df.pivot(index="Model", columns="Target", values="R²"))
 
+            best_models = summary_df.sort_values("R²", ascending=False).groupby("Target").first().reset_index()
+            for _, row in best_models.iterrows():
+                st.info(f"Best model for {row['Target']}: {row['Model']} (R²: {row['R²']:.2f}, MAE: {row['MAE']:.2f}, RMSE: {row['RMSE']:.2f})")
+
         if export_data:
             export_df = pd.concat(export_data, ignore_index=True)
             csv = export_df.to_csv(index=False).encode('utf-8')
             st.download_button("Download Predictions as CSV", csv, "model_predictions.csv", "text/csv")
 
-        st.markdown("### Predict Average Pace for a Given Distance")
+        st.markdown("### Predict Total Time and Average Pace for a Given Distance")
         selected_model_name = st.selectbox("Choose Model for Prediction", list(pace_models.keys()))
-        input_distance = st.number_input("Enter Distance (in meters)", min_value=100.0, step=100.0)
+        input_unit = st.radio("Select Distance Unit", ["Kilometers", "Miles"], horizontal=True)
+        prediction_type = st.radio("Prediction Type", ["Total Summary", "Segment Splits"])
+        input_distance = st.number_input("Enter Distance", min_value=0.1, step=0.1, format="%.2f")
+        custom_hr = st.number_input("Custom Average Heart Rate (bpm)", min_value=60, max_value=220, value=int(np.mean(all_hr)))
+        custom_elev = st.number_input("Custom Average Elevation (m)", min_value=0, max_value=1000, value=int(np.mean(all_elev)))
+
         if input_distance > 0:
             model = pace_models[selected_model_name]
-            input_features = np.array([[max(all_times), np.mean(all_hr), np.mean(all_elev)]])
-            predicted_time = model.predict(input_features)[0]
-            avg_pace = (predicted_time / 60) / (input_distance / 1609.34)  # min/mile
-            st.success(f"Predicted Average Pace: {avg_pace:.2f} min/mile")
+            max_time = max(all_times)
+
+            if prediction_type == "Total Summary":
+                elevation_gain = (custom_elev / max(all_distances)) * (input_distance * 1609.34 if input_unit == "Miles" else input_distance * 1000)
+                input_features = np.array([[max_time, custom_hr, elevation_gain]])
+                predicted_total_time = model.predict(input_features)[0]  # in seconds
+                lower_bound = predicted_total_time * 0.95
+                upper_bound = predicted_total_time * 1.05
+
+                if input_unit == "Miles":
+                    pace = (predicted_total_time / 60) / input_distance
+                    st.success(f"Predicted Time: {predicted_total_time/60:.2f} minutes")
+                    st.info(f"Estimated Range: {lower_bound/60:.2f} - {upper_bound/60:.2f} minutes")
+                    st.success(f"Predicted Average Pace: {pace:.2f} min/mile")
+                else:
+                    pace = (predicted_total_time / 60) / input_distance
+                    st.success(f"Predicted Time: {predicted_total_time/60:.2f} minutes")
+                    st.info(f"Estimated Range: {lower_bound/60:.2f} - {upper_bound/60:.2f} minutes")
+                    st.success(f"Predicted Average Pace: {pace:.2f} min/km")
+
+            elif prediction_type == "Segment Splits":
+                unit_distance = 1.0  # 1 mile or 1 km
+                num_segments = int(input_distance / unit_distance)
+                split_times = []
+                for _ in range(num_segments):
+                    elev = custom_elev  # Optional: vary per segment
+                    elev_gain = (elev / max(all_distances)) * (unit_distance * 1609.34 if input_unit == "Miles" else unit_distance * 1000)
+                    input_feat = np.array([[max_time, custom_hr, elev_gain]])
+                    segment_time = model.predict(input_feat)[0] / num_segments
+                    split_times.append(segment_time / 60)  # convert to minutes
+
+                st.markdown("**Segment Split Times:**")
+                for i, t in enumerate(split_times):
+                    st.write(f"Segment {i+1}: {t:.2f} min")
 else:
     st.info("Please select one or two activities for comparison.")
