@@ -4,7 +4,7 @@ import streamlit as st
 
 # Caching the fetching of activity data
 @st.cache(ttl=3600, show_spinner=True)  # Cache for 1 hour (3600 seconds)
-def fetch_activities(access_token, per_page=100, max_pages=2):
+def fetch_activities(access_token, per_page=100, max_pages=1):
     all_activities = []
     headers = {'Authorization': f'Bearer {access_token}'}
 
@@ -44,7 +44,7 @@ def get_activity_stream(activity_id, access_token, keys=['latlng']):
     return res.json()
 
 def acquire_data(access_token):
-    activities = fetch_activities(access_token, per_page=100, max_pages=2)  # ~200 activities
+    activities = fetch_activities(access_token, per_page=100, max_pages=1)  # ~200 activities
     if not activities:
         print("No activities found.")
         return
