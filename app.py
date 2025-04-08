@@ -63,7 +63,7 @@ if selected_activities:
         stream = fetch.get_activity_stream(activity_id, access_token, keys=keys)
 
         with tabs[idx]:
-            analyze_data.map_activity(activity_id, access_token, key=f"map_{activity_id}")
+            analyze_data.map_activity(activity_id, access_token, key=f"map_{activity_id}", color_by=color_by)
 
         coords = stream.get('latlng', {}).get('data', [])
         heartrates = stream.get('heartrate', {}).get('data', [])
