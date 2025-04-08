@@ -49,9 +49,13 @@ def check_rate_limit(headers):
     url = "https://www.strava.com/api/v3/athletes/self"  # Simple endpoint to get rate limit info
     res = requests.get(url, headers=headers)
 
+    # Check the status code
     if res.status_code != 200:
-        raise Exception("Failed to check rate limit:", res.text)
+        st.error(f"Failed to check rate limit: {res.status_code}")
+        st.write(f"Response: {res.text}")
+        raise Exception(f"Failed to check rate limit: {res.text}")
     
+    # Now extract rate limit information if the request was successful
     remaining_requests = res.headers.get("X-RateLimit-Remaining")
     if remaining_requests == "0":
         reset_time = int(res.headers.get("X-RateLimit-Reset"))
@@ -106,3 +110,16 @@ def acquire_data(access_token):
         print("No activities found.")
         return
     return pd.DataFrame(activities)
+
+def check_access_token_validity(access_token):
+    url = "https://www.strava.com/api/v3/athletes/self"
+    headers = {'Authorization': f'Bearer {access_token}'}
+    res = requests.get(url, headers=headers)
+    
+    if res.status_code == 200:
+        st.info("Access token is valid.")
+        return True
+    else:
+        st.error(f"Failed to validate access token: {res.status_code}")
+        st.write(f"Response: {res.text}")
+        return False

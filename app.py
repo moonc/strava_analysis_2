@@ -19,6 +19,10 @@ if not login.login():
 
 access_token = login.get_access_token()
 
+if not fetch.check_access_token_validity(access_token):
+    st.stop()  # Stop execution if the access token is invalid
+
+
 st.set_page_config(page_title="Strava Mini Dashboard", layout="wide")
 st.title("App (Main Dashboard)")
 
