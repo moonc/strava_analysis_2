@@ -25,15 +25,15 @@ st.markdown(
     """
 )
 
-# Display a friendly welcome image (optional)
-st.image("https://upload.wikimedia.org/wikipedia/commons/2/2e/Strava_logo.svg", width=300)
+# Display a friendly welcome image (replace with a useful image)
+st.image("https://www.example.com/your-image.jpg", width=300)  # Replace with your desired image URL
 
 # Create a nice-looking login button and a function to handle login
 login_button = st.button("Log in with Strava")
 
 if login_button:
     # Redirect the user to the Strava authentication page
-    authorization_url = login.get_authorization_url()
+    authorization_url = login.get_authorization_url()  # This function should return the URL
     st.markdown(f'<a href="{authorization_url}" target="_self"><button style="background-color:#f7a80d;color:white;font-size:18px;padding:15px 25px;border-radius:10px;width:100%;font-weight:bold;">Click to Log In with Strava</button></a>', unsafe_allow_html=True)
 
 # After the user is logged in, fetch access token
@@ -123,14 +123,14 @@ if login.login():  # Check if the user is authenticated
         # --- ML Tab ---
         with tabs[-1]:
             st.subheader("Compare Models: Predict HR and Pace (Aggregate Data)")
-
+            
             models = {
                 "Linear Regression": LinearRegression(),
                 "Random Forest": RandomForestRegressor(n_estimators=n_estimators, random_state=42),
                 "Support Vector Regressor": SVR(),
                 "Gradient Boosting": GradientBoostingRegressor(n_estimators=n_estimators, random_state=42),
             }
-
+            
             selected_models_dict = {k: v for k, v in models.items() if k in selected_models}
             export_data = []
             metrics_summary = []
