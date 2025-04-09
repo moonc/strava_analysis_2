@@ -54,10 +54,10 @@ n_estimators = st.sidebar.slider("Number of Trees (for Forest/Boosting)", 10, 30
 mobile_mode = st.checkbox("📱 Mobile Layout", value=False)
 
 if selected_activities:
-    tabs = st.tabs([f"Map: {name}" for name in selected_activities] + ["Charts", "ML"])
+    tabs = st.tabs([f"Map: {name}" for name in selected_activities] + ["Charts", "ML", "Performance Trends"])
 
     chart_data = []
-    all_hr, all_elev, all_times, all_distances = [], [], [], []
+    all_hr, all_elev, all_times, all_distances, all_dates = [], [], [], [], []
 
     for idx, activity_name in enumerate(selected_activities):
         activity_id = activity_map.get(activity_name)
@@ -72,33 +72,63 @@ if selected_activities:
         elevations = stream.get('altitude', {}).get('data', [])
         times = stream.get('time', {}).get('data', [])
         distances = stream.get('distance', {}).get('data', [])
+        dates = [activity['start_date'] for activity in df.to_dict('records')]
 
         all_hr.extend(heartrates)
         all_elev.extend(elevations)
         all_times.extend(times)
         all_distances.extend(distances)
+        all_dates.extend(dates)
 
-        chart_data.append((activity_name, heartrates, elevations, times, distances))
+        chart_data.append((activity_name, heartrates, elevations, times, distances, dates))
 
-    # --- Charts Tab ---
-    with tabs[-2]:
-        st.subheader("Charts")
-        for name, hr, elev, time, dist in chart_data:
-            st.markdown(f"#### {name}")
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=time, y=hr, mode='lines', name='Heart Rate', line=dict(color='red')))
-            fig.add_trace(go.Scatter(x=dist, y=elev, mode='lines', name='Elevation', yaxis='y2', line=dict(color='green')))
+    # --- Performance Trends Tab ---
+    with tabs[-1]:
+        st.subheader("User's Performance Trends Over Time")
 
-            fig.update_layout(
-                xaxis=dict(title='Time (s)'),
-                yaxis=dict(title='Heart Rate (bpm)', color='red'),
-                yaxis2=dict(title='Elevation (m)', overlaying='y', side='right', color='green'),
-                legend=dict(x=0.01, y=0.99)
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        # Convert date strings to datetime objects
+        df['start_date'] = pd.to_datetime(df['start_date'])
+
+        # Plot Heart Rate and Pace Trends
+        st.subheader("Heart Rate and Pace Trends")
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df['start_date'], y=df['heartrate'], mode='lines', name='Heart Rate', line=dict(color='red')))
+        fig.add_trace(go.Scatter(x=df['start_date'], y=df['pace'], mode='lines', name='Pace', line=dict(color='blue')))
+        fig.update_layout(title="Heart Rate and Pace Trends Over Time", xaxis_title="Date", yaxis_title="Value")
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Plot Elevation Gain Over Time
+        st.subheader("Elevation Gain Over Time")
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(x=df['start_date'], y=df['elevation'], mode='lines', name='Elevation Gain', line=dict(color='green')))
+        fig2.update_layout(title="Elevation Gain Over Time", xaxis_title="Date", yaxis_title="Elevation (m)")
+        st.plotly_chart(fig2, use_container_width=True)
+
+        # Weekly/Monthly Totals
+        st.subheader("Weekly/Monthly Totals")
+        df['week'] = df['start_date'].dt.strftime('%Y-%U')  # Week number
+        df['month'] = df['start_date'].dt.strftime('%Y-%m')  # Month
+        weekly_totals = df.groupby('week').agg({'distance': 'sum', 'time': 'sum', 'elevation': 'sum'}).reset_index()
+        monthly_totals = df.groupby('month').agg({'distance': 'sum', 'time': 'sum', 'elevation': 'sum'}).reset_index()
+
+        # Plot Weekly Totals
+        st.subheader("Weekly Totals")
+        fig3 = go.Figure()
+        fig3.add_trace(go.Bar(x=weekly_totals['week'], y=weekly_totals['distance'], name="Distance (m)", marker_color='blue'))
+        fig3.add_trace(go.Bar(x=weekly_totals['week'], y=weekly_totals['time'], name="Time (s)", marker_color='orange'))
+        fig3.update_layout(title="Weekly Totals", xaxis_title="Week", yaxis_title="Total")
+        st.plotly_chart(fig3, use_container_width=True)
+
+        # Plot Monthly Totals
+        st.subheader("Monthly Totals")
+        fig4 = go.Figure()
+        fig4.add_trace(go.Bar(x=monthly_totals['month'], y=monthly_totals['distance'], name="Distance (m)", marker_color='blue'))
+        fig4.add_trace(go.Bar(x=monthly_totals['month'], y=monthly_totals['time'], name="Time (s)", marker_color='orange'))
+        fig4.update_layout(title="Monthly Totals", xaxis_title="Month", yaxis_title="Total")
+        st.plotly_chart(fig4, use_container_width=True)
 
     # --- ML Tab ---
-    with tabs[-1]:
+    with tabs[-2]:
         st.subheader("Compare Models: Predict HR and Pace (Aggregate Data)")
 
         models = {
@@ -159,41 +189,6 @@ if selected_activities:
             export_df = pd.concat(export_data, ignore_index=True)
             csv = export_df.to_csv(index=False).encode('utf-8')
             st.download_button("Download Predictions as CSV", csv, "model_predictions.csv", "text/csv")
-
-        st.markdown("### Predict Total Time and Average Pace for a Given Distance")
-        selected_model_name = st.selectbox("Choose Model for Prediction", list(pace_models.keys()))
-        input_unit = st.radio("Select Distance Unit", ["Kilometers", "Miles"], horizontal=True)
-        prediction_type = st.radio("Prediction Type", ["Total Summary", "Segment Splits"])
-        input_distance = st.number_input("Enter Distance", min_value=0.1, step=0.1, format="%.2f")
-        custom_hr = st.number_input("Custom Average Heart Rate (bpm)", min_value=60, max_value=220, value=int(np.mean(all_hr)))
-        custom_elev = st.number_input("Custom Average Elevation (m)", min_value=0, max_value=1000, value=int(np.mean(all_elev)))
-
-        if input_distance > 0:
-            model = pace_models[selected_model_name]
-            max_time = max(all_times)
-            if prediction_type == "Total Summary":
-                elevation_gain = (custom_elev / max(all_distances)) * (input_distance * 1609.34 if input_unit == "Miles" else input_distance * 1000)
-                input_features = np.array([[max_time, custom_hr, elevation_gain]])
-                predicted_total_time = model.predict(input_features)[0]
-                lower_bound = predicted_total_time * 0.95
-                upper_bound = predicted_total_time * 1.05
-                pace = (predicted_total_time / 60) / input_distance
-                unit_label = "min/mile" if input_unit == "Miles" else "min/km"
-                st.success(f"Predicted Time: {predicted_total_time/60:.2f} minutes")
-                st.info(f"Estimated Range: {lower_bound/60:.2f} - {upper_bound/60:.2f} minutes")
-                st.success(f"Predicted Average Pace: {pace:.2f} {unit_label}")
-            elif prediction_type == "Segment Splits":
-                unit_distance = 1.0
-                num_segments = int(input_distance / unit_distance)
-                split_times = []
-                for _ in range(num_segments):
-                    elev_gain = (custom_elev / max(all_distances)) * (unit_distance * 1609.34 if input_unit == "Miles" else unit_distance * 1000)
-                    input_feat = np.array([[max_time, custom_hr, elev_gain]])
-                    segment_time = model.predict(input_feat)[0] / num_segments
-                    split_times.append(segment_time / 60)
-                st.markdown("**Segment Split Times:**")
-                for i, t in enumerate(split_times):
-                    st.write(f"Segment {i+1}: {t:.2f} min")
 
 else:
     st.info("Please select one or two activities for comparison.")
