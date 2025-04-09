@@ -6,7 +6,7 @@ import branca.colormap as cm
 import numpy as np
 import pandas as pd
 
-def import_data(access_token, run=False):
+def import_data(access_token, run=True):
     df = fetch.acquire_data(access_token)
     if df is None or df.empty:
         print("No activities found.")
