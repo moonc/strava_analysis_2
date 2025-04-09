@@ -12,16 +12,13 @@ from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # Authenticate user
 if not login.login():
     st.stop()
 
 access_token = login.get_access_token()
-
-#if not fetch.check_access_token_validity(access_token):
-#   st.stop()  # Stop execution if the access token is invalid
-
 
 st.set_page_config(page_title="Strava Mini Dashboard", layout="wide")
 st.title("App (Main Dashboard)")
@@ -46,7 +43,7 @@ model_options = [
     "Random Forest", 
     "Support Vector Regressor",
     "Gradient Boosting", 
-    ]
+]
 selected_models = st.sidebar.multiselect("Select ML Models", model_options, default=model_options)
 
 # --- Hyperparameters ---
@@ -149,7 +146,11 @@ if selected_activities:
             st.markdown("### Model Comparison Summary")
             summary_df = pd.DataFrame(metrics_summary, columns=["Model", "Target", "R²", "MAE", "RMSE"])
             st.dataframe(summary_df)
+
+            # Display Bar Chart for R² Scores
+            st.subheader("R² Comparison")
             st.bar_chart(summary_df.pivot(index="Model", columns="Target", values="R²"))
+
             best_models = summary_df.sort_values("R²", ascending=False).groupby("Target").first().reset_index()
             for _, row in best_models.iterrows():
                 st.info(f"Best model for {row['Target']}: {row['Model']} (R²: {row['R²']:.2f}, MAE: {row['MAE']:.2f}, RMSE: {row['RMSE']:.2f})")
